@@ -24,6 +24,7 @@ class Flatten(nn.Module):
         return x.view(x.size(0), -1)
 
 class ChannelGate(nn.Module):
+    '''对特征图x进行通道注意力筛选'''
     def __init__(self, gate_channels, reduction_ratio=16, pool_types=['avg', 'max']):
         """
         gate_channels:输入通道数
@@ -50,6 +51,7 @@ class ChannelGate(nn.Module):
             elif pool_type=='max':
                 '''全局最大值池化'''
                 max_pool = F.max_pool2d( x, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                '''将池化结果展平后，用全连接层训练得到感兴趣的通道'''
                 channel_att_raw = self.mlp( max_pool )
             elif pool_type=='lp':
                 lp_pool = F.lp_pool2d( x, 2, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
@@ -60,11 +62,15 @@ class ChannelGate(nn.Module):
                 channel_att_raw = self.mlp( lse_pool )
 
             if channel_att_sum is None:
+                '''保存使用全局均值池化得到的感兴趣通道'''
                 channel_att_sum = channel_att_raw
             else:
+                '''将用最大值池化和用全局均值池化得到的2个感兴趣通道相加'''
                 channel_att_sum = channel_att_sum + channel_att_raw
-
+        
+        '''将感兴趣通道使用sigmod映射后，在将其从[batch_size, channels, 1, 1]广播到[batch_size, channels, x.h, x.w]'''
         scale = F.sigmoid( channel_att_sum ).unsqueeze(2).unsqueeze(3).expand_as(x)
+        '''使用scale对x进行感兴趣通道筛选'''
         return x * scale
 
 def logsumexp_2d(tensor):
@@ -75,13 +81,18 @@ def logsumexp_2d(tensor):
 
 class ChannelPool(nn.Module):
     def forward(self, x):
+        '''首先在x的第1维(channel)筛选最大值和平均值，得到2个形状为[batch_size, 1, x.h, x.w]的特征图，
+           然后将这两张图在第1维(channel)进行拼接'''
         return torch.cat( (torch.max(x,1)[0].unsqueeze(1), torch.mean(x,1).unsqueeze(1)), dim=1 )
 
 class SpatialGate(nn.Module):
+    '''对特征图x进行空间注意力筛选'''
     def __init__(self):
         super(SpatialGate, self).__init__()
         kernel_size = 7
+        '''通道池化'''
         self.compress = ChannelPool()
+        '''对池化后的结果进行卷积'''
         self.spatial = BasicConv(2, 1, kernel_size, stride=1, padding=(kernel_size-1) // 2, relu=False)
     def forward(self, x):
         x_compress = self.compress(x)
