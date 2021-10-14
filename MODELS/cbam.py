@@ -98,6 +98,7 @@ class SpatialGate(nn.Module):
         x_compress = self.compress(x)
         x_out = self.spatial(x_compress)
         scale = F.sigmoid(x_out) # broadcasting
+        '''使用scale对x进行感兴趣位置筛选'''
         return x * scale
 
 class CBAM(nn.Module):
