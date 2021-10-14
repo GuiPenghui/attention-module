@@ -25,6 +25,11 @@ class Flatten(nn.Module):
 
 class ChannelGate(nn.Module):
     def __init__(self, gate_channels, reduction_ratio=16, pool_types=['avg', 'max']):
+        """
+        gate_channels:输入通道数
+        reduction_ratio:减少率
+        pool_types:全局池化方式
+        """
         super(ChannelGate, self).__init__()
         self.gate_channels = gate_channels
         self.mlp = nn.Sequential(
@@ -38,9 +43,12 @@ class ChannelGate(nn.Module):
         channel_att_sum = None
         for pool_type in self.pool_types:
             if pool_type=='avg':
+                '''全局均值池化'''
                 avg_pool = F.avg_pool2d( x, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
+                '''将池化结果展平后，用全连接层训练得到感兴趣的通道'''
                 channel_att_raw = self.mlp( avg_pool )
             elif pool_type=='max':
+                '''全局最大值池化'''
                 max_pool = F.max_pool2d( x, (x.size(2), x.size(3)), stride=(x.size(2), x.size(3)))
                 channel_att_raw = self.mlp( max_pool )
             elif pool_type=='lp':
